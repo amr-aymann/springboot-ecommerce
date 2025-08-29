@@ -14,18 +14,23 @@ import com.AmrShop.model.OrderStatus;
 import com.AmrShop.model.Product;
 import com.AmrShop.repository.OrderRepository;
 import com.AmrShop.repository.ProductRepository;
+import com.AmrShop.repository.CartRepository;
 
 import jakarta.transaction.Transactional;
 
+import com.AmrShop.model.Cart;
+import com.AmrShop.model.CartItem;
 import com.AmrShop.model.Order;
 
 public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
+    private final CartRepository cartRepository;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, CartRepository cartRepository) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
+        this.cartRepository = cartRepository;
     }
 
     public OrderDTO toDto(Order order) {
@@ -96,6 +101,58 @@ public class OrderService {
         Order order = orderRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
         order.setStatus(status);
         Order saved = orderRepository.save(order);
+        return toDto(saved);
+    }
+
+    @Transactional
+    public OrderDTO createFromCart(Long cartId, Long userId) {
+        Cart cart = cartRepository.findById(cartId)
+                .orElseThrow(() -> new ResourceNotFoundException("Cart not found"));
+
+        if (cart.getItems().isEmpty())
+            throw new BadRequestException("Cart is empty");
+
+        // Optional: ensure cart belongs to userId if provided
+        if (userId != null && cart.getUserId() != null && !cart.getUserId().equals(userId)) {
+            throw new BadRequestException("Cart does not belong to user");
+        }
+
+        Order order = new Order();
+        order.setCustomerId(userId != null ? userId : cart.getUserId() != null ? cart.getUserId() : 0L);
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (CartItem ci : cart.getItems()) {
+            Product p = productRepository.findById(ci.getProductId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Product not found: " + ci.getProductId()));
+
+            if (!p.getActive())
+                throw new BadRequestException("Product not available: " + p.getId());
+            if (p.getStock() < ci.getQuantity())
+                throw new BadRequestException("Not enough stock for product: " + p.getId());
+
+            // decrement stock (will participate in same tx)
+            p.setStock(p.getStock() - ci.getQuantity());
+            productRepository.save(p);
+
+            OrderItem oi = new OrderItem();
+            oi.setOrder(order);
+            oi.setProductId(p.getId());
+            oi.setProductNameSnapshot(p.getName());
+            oi.setUnitPriceSnapshot(p.getPrice());
+            oi.setQuantity(ci.getQuantity());
+            order.getItems().add(oi);
+
+            total = total.add(p.getPrice().multiply(BigDecimal.valueOf(ci.getQuantity())));
+        }
+
+        order.setTotalAmount(total);
+        order.setStatus(OrderStatus.PENDING_PAYMENT);
+        Order saved = orderRepository.save(order);
+
+        // Optionally: clear the cart after creating order
+        cart.getItems().clear();
+        cartRepository.save(cart);
+
         return toDto(saved);
     }
 

@@ -55,7 +55,7 @@ public class AuthController {
         Set<String> roles = principal.getAuthorities().stream()
             .map(a -> a.getAuthority())
             .collect(Collectors.toSet());
-        String token = jwtUtil.generateToken(principal.getUsername(), roles);
+        String token = jwtUtil.generateToken(principal);
         return ResponseEntity.ok(new JwtResponse(token));
     }
 }
