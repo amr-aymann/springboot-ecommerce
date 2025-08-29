@@ -1,0 +1,13 @@
+package com.AmrShop.model;
+
+public enum OrderStatus {
+CREATED,
+PENDING_PAYMENT,
+PAID,
+PROCESSING,
+PACKED,
+SHIPPED,
+DELIVERED,
+CANCELLED,
+REFUNDED
+}
