@@ -3,6 +3,8 @@ package com.AmrShop.service;
 import java.math.BigDecimal;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+
 import com.AmrShop.dto.CreateOrderDTO;
 import com.AmrShop.dto.CreateOrderItemDTO;
 import com.AmrShop.dto.OrderDTO;
@@ -22,6 +24,7 @@ import com.AmrShop.model.Cart;
 import com.AmrShop.model.CartItem;
 import com.AmrShop.model.Order;
 
+@Service
 public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
