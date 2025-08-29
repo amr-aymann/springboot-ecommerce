@@ -8,69 +8,51 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.*;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 public class SecurityConfig {
 
-    private final CustomUserDetailsService customUserDetailsService;
+    private final UserDetailsService userDetailsService;
 
-    public SecurityConfig(CustomUserDetailsService customUserDetailsService) {
-        this.customUserDetailsService = customUserDetailsService;
+    public SecurityConfig(UserDetailsService userDetailsService) {
+        this.userDetailsService = userDetailsService;
     }
 
-    @Value("${spring.security.user.name}")
-    private String inMemoryUsername;
-
-    @Value("${spring.security.user.password}")
-    private String inMemoryPassword;
-
-    @Value("${spring.security.user.roles}")
-    private String inMemoryRoles;
-
+    // Password encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // ✅ Create an in-memory user manager from application.properties
-    @Bean
-    public InMemoryUserDetailsManager inMemoryUserDetailsManager(PasswordEncoder encoder) {
-        UserDetails user = User.withUsername(inMemoryUsername)
-                .password(encoder.encode(inMemoryPassword))
-                .roles(inMemoryRoles.split(","))
-                .build();
-        return new InMemoryUserDetailsManager(user);
-    }
-
-    // ✅ Merge DB + in-memory users
-    
-    @Bean
-    @Primary
-    public UserDetailsService userDetailsService(InMemoryUserDetailsManager inMemoryUserDetailsManager) {
-        return username -> {
-            try {
-                return customUserDetailsService.loadUserByUsername(username);
-            } catch (UsernameNotFoundException ex) {
-                return inMemoryUserDetailsManager.loadUserByUsername(username);
-            }
-        };
-    }
-
-    @Bean
-    public AuthenticationProvider authenticationProvider(UserDetailsService userDetailsService) {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
-        return authProvider;
-    }
-
+    // AuthenticationManager — new way
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
+
+    // SecurityFilterChain replaces WebSecurityConfigurerAdapter
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/auth/**").permitAll()
+                .anyRequest().authenticated()
+            )
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .httpBasic(Customizer.withDefaults());
+
+        return http.build();
+    }
 }
+
